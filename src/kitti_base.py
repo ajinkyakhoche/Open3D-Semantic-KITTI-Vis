@@ -71,6 +71,8 @@ class PointCloud_Vis():
         self.vis.remove_geometry(self.pcd)
         self.vis.add_geometry(self.pcd)
         self.vis.get_view_control().convert_from_pinhole_camera_parameters(self.param)
+        # print('extrinsic param  : ')
+        # print(np.round(self.param.extrinsic,1))
         # self.vis.update_geometry() # bug fix for open3d 0.9.0.0
         self.vis.poll_events()
         self.vis.update_renderer()
@@ -147,9 +149,13 @@ class Semantic_KITTI_Utils():
             print('End of sequence')
             return False
 
-        fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
-        fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))
-        fn_label = os.path.join(self.sequence_root, 'labels/%06d.label' %(self.index))
+        # fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
+        # fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))
+        # fn_label = os.path.join(self.sequence_root, 'labels/%06d.label' %(self.index))
+
+        fn_frame = os.path.join(('/').join(self.sequence_root.split('/')[:-3]+['data_odometry_color/dataset']+self.sequence_root.split('/')[-3:]), 'image_2/%06d.png' % (self.index))
+        fn_velo = os.path.join(('/').join(self.sequence_root.split('/')[:-3]+['data_odometry_velodyne/dataset']+self.sequence_root.split('/')[-3:]), 'velodyne/%06d.bin' %(self.index))
+        fn_label = os.path.join(('/').join(self.sequence_root.split('/')[:-3]+['data_odometry_labels/dataset']+self.sequence_root.split('/')[-3:]), 'labels/%06d.label' %(self.index))
 
         assert os.path.exists(fn_frame), 'Broken dataset %s' % (fn_frame)
         assert os.path.exists(fn_velo), 'Broken dataset %s' % (fn_velo)
@@ -241,7 +247,9 @@ class Semantic_KITTI_Utils():
 
         # approximate_class must be set to true
         # see this issue for more info https://github.com/intel-isl/Open3D/issues/1085
-        pcd, trace = pcd.voxel_down_sample_and_trace(voxel_size,self.min_bound,self.max_bound,approximate_class=True)
+        # pcd, trace = pcd.voxel_down_sample_and_trace(voxel_size,self.min_bound,self.max_bound,approximate_class=True)
+        pcd, trace = open3d.voxel_down_sample_and_trace(pcd, voxel_size,self.min_bound,self.max_bound,approximate_class=True)
+
         to_index_org = np.max(trace, 1)
 
         pts = points[to_index_org]
