@@ -1,4 +1,4 @@
-import open3d
+import open3d as o3d
 import json
 import os
 import numpy as np
@@ -40,10 +40,39 @@ def calib_cam2cam(fn_c2c, mode = '02'):
             P = P[:3, :3]  # erase 4th column ([0,0,0])
     return P
 
+#TODO: figure out if remove ego pts and remove ground should be imported from dense reg project?
+# remove points below road
+def remove_ground(lidar):
+    # h_road = self.estimate_road_height(lidar)
+    # mask_above_ground = (lidar[:,2] > h_road)
+    mask_above_ground = (lidar[:,2] > -2) #-2 was self.h_road in pc_master.py
+    # create empty open3d PointCloud
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(lidar[mask_above_ground,0:3])
+    
+    # self.h_road = h_road
+    return pcd
+
+#source: http://www.open3d.org/docs/release/tutorial/Basic/kdtree.html
+def remove_ego_pts(pcd):
+    # pcd.paint_uniform_color([0.5, 0.5, 0.5])
+    pcd_tree = o3d.geometry.KDTreeFlann(pcd)
+    # print("Find closest 40 pts, paint green.")
+    [k, idx, _] = pcd_tree.search_knn_vector_3d(np.array([0,0,0]), 40)
+    # np.asarray(pcd.colors)[idx[1:], :] = [0, 1, 0]
+    # print("Visualize the point cloud.")
+    # o3d.visualization.draw_geometries([pcd])
+    source_pts = np.asarray(pcd.points)
+    mask = np.arange(source_pts.shape[0], dtype=int)
+    mask = np.delete(mask, np.array(idx))
+    pcd_result = o3d.geometry.PointCloud()
+    pcd_result.points = o3d.utility.Vector3dVector(source_pts[mask,:])
+    return pcd_result
+
 class PointCloud_Vis():
     def __init__(self,cfg, new_config = False, width = 800, height = 800):
-        self.vis = open3d.visualization.VisualizerWithKeyCallback()
-        self.vis.create_window(width=width, height=height, left=100)
+        self.vis = o3d.visualization.VisualizerWithKeyCallback()
+        self.vis.create_window(width=width, height=height, left=100, top=100)
         self.vis.get_render_option().load_from_json('config/render_option.json')
         self.cfg = cfg
 
@@ -56,9 +85,9 @@ class PointCloud_Vis():
         data['intrinsic']['intrinsic_matrix'][6] = (width-1)/2
         data['intrinsic']['intrinsic_matrix'][7] = (height-1)/2
         json.dump(data, open(self.cfg,'w'),indent=4)
-        self.param = open3d.io.read_pinhole_camera_parameters(self.cfg)
+        self.param = o3d.io.read_pinhole_camera_parameters(self.cfg)
 
-        self.pcd = open3d.geometry.PointCloud()
+        self.pcd = o3d.geometry.PointCloud()
         self.vis.add_geometry(self.pcd)
         self.vis.register_key_callback(32, lambda vis: exit())
     
@@ -82,7 +111,7 @@ class PointCloud_Vis():
             data = json.load(open(self.cfg,'r'))
 
             self.param = self.vis.get_view_control().convert_to_pinhole_camera_parameters()
-            open3d.io.write_pinhole_camera_parameters(self.cfg,self.param)
+            o3d.io.write_pinhole_camera_parameters(self.cfg,self.param)
             self.new_config = False
 
             # add our own parameters
@@ -105,19 +134,34 @@ class PointCloud_Vis():
             self.vis.capture_screen_image(fn, False)
 
 class Semantic_KITTI_Utils():
-    def __init__(self, root):
+    def __init__(self, root, n_scans_stitched):
         self.root = root
+        self.n_scans_stitched = n_scans_stitched
         self.init()
 
-    def set_part(self, part='00'):
+        
+
+    def set_part(self, part='00', saved_poses_path=''):
         length = {
             '00': 4540,'01':1100,'02':4660,'03':800,'04':270,'05':2760,
             '06':1100,'07':1100,'08':4070,'09':1590,'10':1200
         }
         assert part in length.keys(), 'Only %s are supported' %(length.keys())
-        self.sequence_root = os.path.join(self.root, 'sequences/%s/'%(part))
+        # self.sequence_root = os.path.join(self.root, 'sequences/%s/'%(part))
+        self.frame_root = os.path.join(self.root, 'data_odometry_color/dataset/sequences/', part)
+        self.vel_root = os.path.join(self.root, 'data_odometry_velodyne/dataset/sequences/', part)
+        self.label_root = os.path.join(self.root, 'data_odometry_labels/dataset/sequences/', part)
+        self.overlay_root = os.path.join(self.root, "SLAM_"+str(self.n_scans_stitched)+'/dataset/sequences/', part)
+
         self.index = 0
         self.max_index = length[part]
+
+        saved_poses_file = os.path.join(saved_poses_path, "global_poses_"+part+".txt")
+        if os.path.exists(saved_poses_file):
+            saved_poses = np.loadtxt(saved_poses_file)
+            saved_poses = saved_poses.reshape((saved_poses.shape[0], 4, 4))
+            self.global_poses = [saved_poses[i] for i in range(np.shape(saved_poses)[0])]
+
         return self.max_index
     
     def get_max_index(self):
@@ -139,6 +183,26 @@ class Semantic_KITTI_Utils():
                         [153, 153, 153], [250, 170, 30], [220, 220, 0],[107, 142, 35], [152, 251, 152], [0, 130, 180],
                         [220, 20, 60], [255, 0, 0], [0, 0, 142], [0, 0, 70], [0, 60, 100], [0, 80, 100], [0, 0, 230],[119, 11, 32]]
 
+        self.pcd_main = o3d.geometry.PointCloud()
+        self.label_main = np.array([])
+
+    
+    def load_pc_and_label(self, ind, do_global_tf=False, downsample=False, voxel_size=0.01):
+        # load point cloud
+        lidar = np.fromfile(os.path.join(self.vel_root, 'velodyne/%06d.bin' %(ind)), dtype=np.float32).reshape((-1, 4))[:, :3]
+        # remove pts below ground and get an open3d pc
+        pcd = remove_ground(lidar)
+        # remove points due to ego vehicle
+        pcd = remove_ego_pts(pcd)
+
+        if do_global_tf:
+            pcd.transform(self.global_poses[ind])
+
+        if downsample:
+            pcd = o3d.geometry.voxel_down_sample(pcd, voxel_size)
+        
+        return pcd
+
     def load(self,index = None):
         """  Load the frame, point cloud and semantic labels from file """
 
@@ -147,29 +211,53 @@ class Semantic_KITTI_Utils():
             print('End of sequence')
             return False
 
-        fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
-        fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))
-        fn_label = os.path.join(self.sequence_root, 'labels/%06d.label' %(self.index))
-
-        assert os.path.exists(fn_frame), 'Broken dataset %s' % (fn_frame)
-        assert os.path.exists(fn_velo), 'Broken dataset %s' % (fn_velo)
-        assert os.path.exists(fn_label), 'Broken dataset %s' % (fn_label)
-
-        self.frame = cv2.imread(fn_frame)
-        assert self.frame is not None, 'Broken dataset %s' % (fn_frame)
+        # pcd_main = o3d.geometry.PointCloud()
+        
+        if self.index is not 0:
+            # remove pc at ind-1 
+            pcd2 = self.load_pc_and_label(self.index -1, do_global_tf=True)
+            pt_to_remove_list = list(range(0,np.array(pcd2.points).shape[0]))
+            self.pcd_main = o3d.geometry.select_down_sample(self.pcd_main, pt_to_remove_list, invert=True)
             
-        self.points = np.fromfile(fn_velo, dtype=np.float32).reshape(-1, 4)
-        self.n_pts = self.points.shape[0]
-        label = np.fromfile(fn_label, dtype=np.uint32).reshape((-1))
-
-        if label.shape[0] == self.points.shape[0]:
-            self.sem_label = label & 0xFFFF  # semantic label in lower half
-            self.inst_label = label >> 16  # instance id in upper half
-            assert((self.sem_label + (self.inst_label << 16) == label).all()) # sanity check
+            if (self.index + self.n_scans_stitched) < self.max_index: 
+                # add pc at self.index + self.n_scans_stitched
+                pcd1 = self.load_pc_and_label(self.index - 1 + self.n_scans_stitched, do_global_tf=True)
+                self.pcd_main = self.pcd_main + pcd1
         else:
-            print("Points shape: ", self.points.shape)
-            print("Label shape: ", label.shape)
-            raise ValueError("Scan and Label don't contain same number of points")
+            for i in range(self.index, self.index + self.n_scans_stitched):
+                pcd1 = self.load_pc_and_label(i, do_global_tf=True)
+                self.pcd_main = self.pcd_main + pcd1
+                
+
+        # # fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
+        # # fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))
+        # # fn_label = os.path.join(self.sequence_root, 'labels/%06d.label' %(self.index))
+
+        # fn_frame = os.path.join(('/').join(self.sequence_root.split('/')[:-3]+['data_odometry_color/dataset']+self.sequence_root.split('/')[-3:]), 'image_2/%06d.png' % (self.index))
+        # fn_velo = os.path.join(('/').join(self.sequence_root.split('/')[:-3]+['data_odometry_velodyne/dataset']+self.sequence_root.split('/')[-3:]), 'velodyne/%06d.bin' %(self.index))
+        # fn_label = os.path.join(('/').join(self.sequence_root.split('/')[:-3]+['data_odometry_labels/dataset']+self.sequence_root.split('/')[-3:]), 'labels/%06d.label' %(self.index))
+
+        # assert os.path.exists(fn_frame), 'Broken dataset %s' % (fn_frame)
+        # assert os.path.exists(fn_velo), 'Broken dataset %s' % (fn_velo)
+        # assert os.path.exists(fn_label), 'Broken dataset %s' % (fn_label)
+
+        # self.frame = cv2.imread(fn_frame)
+        # assert self.frame is not None, 'Broken dataset %s' % (fn_frame)
+            
+        # self.points = np.fromfile(fn_velo, dtype=np.float32).reshape(-1, 4)
+        # self.n_pts = self.points.shape[0]
+        # label = np.fromfile(fn_label, dtype=np.uint32).reshape((-1))
+
+        # if label.shape[0] == self.points.shape[0]:
+        #     self.sem_label = label & 0xFFFF  # semantic label in lower half
+        #     self.inst_label = label >> 16  # instance id in upper half
+        #     assert((self.sem_label + (self.inst_label << 16) == label).all()) # sanity check
+        # else:
+        #     print("Points shape: ", self.points.shape)
+        #     print("Label shape: ", label.shape)
+        #     raise ValueError("Scan and Label don't contain same number of points")
+
+        self.overlay_frame = cv2.imread(os.path.join(self.overlay_root, 'slam_depth_overlay_%06d.png' %(self.index)))
 
         return True
     
@@ -236,25 +324,26 @@ class Semantic_KITTI_Utils():
         points = self.points[combined]
         label = self.sem_label[combined]
 
-        pcd = open3d.geometry.PointCloud()
-        pcd.points = open3d.utility.Vector3dVector(points[:,:3])
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points[:,:3])
 
         # approximate_class must be set to true
-        # see this issue for more info https://github.com/intel-isl/Open3D/issues/1085
-        pcd, trace = pcd.voxel_down_sample_and_trace(voxel_size,self.min_bound,self.max_bound,approximate_class=True)
+        # see this issue for more info https://github.com/intel-isl/o3d/issues/1085
+        # pcd, trace = pcd.voxel_down_sample_and_trace(voxel_size,self.min_bound,self.max_bound,approximate_class=True)
+        pcd, trace = o3d.voxel_down_sample_and_trace(pcd, voxel_size,self.min_bound,self.max_bound,approximate_class=True)
         to_index_org = np.max(trace, 1)
 
         pts = points[to_index_org]
         sem_label = label[to_index_org]
         self.pts = pts
         colors = np.array([self.sem_color_map[x] for x in sem_label])
-        pcd.colors = open3d.utility.Vector3dVector(colors/255.0)
+        pcd.colors = o3d.utility.Vector3dVector(colors/255.0)
 
         return pcd,sem_label
 
     def get_in_view_pts(self, pcd, sem_label):
         """ 
-            Convert open3d.geometry.PointCloud object to [4, N] array
+            Convert o3d.geometry.PointCloud object to [4, N] array
                         [x_1 , x_2 , .. ]
             xyz_v   =   [y_1 , y_2 , .. ]
                         [z_1 , z_2 , .. ]

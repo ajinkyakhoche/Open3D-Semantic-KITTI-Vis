@@ -17,6 +17,8 @@ def init_params():
     parser.add_argument('--index', default = 0, type=int, help='start index')
     parser.add_argument('--voxel', default = 0.1, type=float, help='voxel size for down sampleing')
     parser.add_argument('--modify', action = 'store_true', default = False, help='modify an existing view')
+    parser.add_argument('--n_scans_stitched', default=10, type=int, help='no. of pc scans to stitch')
+    parser.add_argument('--saved_poses_path', default='../KITTI_dense_registration/saved_global_poses/', type=str)
     args = parser.parse_args()
 
     assert os.path.exists(args.root),'Root directory does not exist '+ args.root
@@ -30,8 +32,8 @@ def init_params():
     z_range = cfg_data['z_range']
     d_range = cfg_data['d_range']
 
-    handle = Semantic_KITTI_Utils(root = args.root)
-    handle.set_part(part = args.part)
+    handle = Semantic_KITTI_Utils(root = args.root, n_scans_stitched=args.n_scans_stitched)
+    handle.set_part(part = args.part, saved_poses_path=args.saved_poses_path)
     handle.set_filter(h_fov, v_fov, x_range, y_range, z_range, d_range)
     vis_handle = PointCloud_Vis(args.cfg, new_config = args.modify)
 
@@ -39,43 +41,49 @@ def init_params():
 
 if __name__ == "__main__":
     args, handle, vis_handle = init_params()
-    cv2.namedWindow('depth');cv2.moveWindow("depth", 600,000)
-    cv2.namedWindow('learn_mapping');cv2.moveWindow("learn_mapping", 400,200)
-    cv2.namedWindow('semantic');cv2.moveWindow("semantic", 200,400)
+    # cv2.namedWindow('depth');cv2.moveWindow("depth", 600,000)
+    # cv2.namedWindow('learn_mapping');cv2.moveWindow("learn_mapping", 400,200)
+    # cv2.namedWindow('semantic');cv2.moveWindow("semantic", 200,400)
+
+    cv2.namedWindow('img-depth-overlay');cv2.moveWindow("img-depth-overlay", 600,000)
 
     for index in range(args.index, handle.get_max_index()):
         # Load image, velodyne points and semantic labels
         handle.load(index)
 
-        # Downsample the point cloud and semantic labels at the same time
-        pcd,sem_label = handle.extract_points(voxel_size = args.voxel)
-        pts_3d = np.asarray(pcd.points).astype(np.float32)
+        # # Downsample the point cloud and semantic labels at the same time
+        # pcd,sem_label = handle.extract_points(voxel_size = args.voxel)
+        # pts_3d = np.asarray(pcd.points).astype(np.float32)
 
-        print(index,'/',handle.get_max_index(), 'n_pts',pts_3d.shape[0])
+        # print(index,'/',handle.get_max_index(), 'n_pts',pts_3d.shape[0])
 
-        # Filter out the points that are behind us.
-        pts_3d, sem_label = handle.get_in_view_pts(pcd, sem_label)
+        # # Filter out the points that are behind us.
+        # pts_3d, sem_label = handle.get_in_view_pts(pcd, sem_label)
 
-        # Project in view 3D points to 2D image using RT matrix, and keeping the labels consistent
-        pts_2d, color = handle.project_3d_to_2d(pts_3d)
+        # # Project in view 3D points to 2D image using RT matrix, and keeping the labels consistent
+        # pts_2d, color = handle.project_3d_to_2d(pts_3d)
 
-        # Map the Semantic KITTI labels to KITTI original 19 classes labels
-        sem_label_learn_mapping = handle.learning_mapping(sem_label)
+        # # Map the Semantic KITTI labels to KITTI original 19 classes labels
+        # sem_label_learn_mapping = handle.learning_mapping(sem_label)
 
-        # Showing the point cloud depth
-        img_depth = handle.draw_2d_points(pts_2d, color)
+        # # Showing the point cloud depth
+        # img_depth = handle.draw_2d_points(pts_2d, color)
 
-        # Showing the Semantic KITTI cloud cloud labels
-        img_semantic = handle.draw_2d_sem_points(pts_2d, sem_label)
+        # # Showing the Semantic KITTI cloud cloud labels
+        # img_semantic = handle.draw_2d_sem_points(pts_2d, sem_label)
 
-        # Showing the labels mapped to kitti original 19 classes labels
-        img_learn_mapping = handle.draw_2d_sem_points_with_learning_mapping(pts_2d, sem_label_learn_mapping)
+        # # Showing the labels mapped to kitti original 19 classes labels
+        # img_learn_mapping = handle.draw_2d_sem_points_with_learning_mapping(pts_2d, sem_label_learn_mapping)
 
+        # # Update the display
+        # vis_handle.update(pcd)
+        # cv2.imshow('depth', img_depth)
+        # cv2.imshow('semantic', img_semantic)
+        # cv2.imshow('learn_mapping', img_learn_mapping)
+        
         # Update the display
-        vis_handle.update(pcd)
-        cv2.imshow('depth', img_depth)
-        cv2.imshow('semantic', img_semantic)
-        cv2.imshow('learn_mapping', img_learn_mapping)
+        vis_handle.update(handle.pcd_main)
+        cv2.imshow('img-depth-overlay', handle.overlay_frame)
 
         # Saving the frames
         # vis_handle.capture_screen('tmp/img_3d.png')
