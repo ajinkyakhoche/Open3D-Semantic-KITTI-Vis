@@ -183,7 +183,7 @@ class Semantic_KITTI_Utils():
                         [153, 153, 153], [250, 170, 30], [220, 220, 0],[107, 142, 35], [152, 251, 152], [0, 130, 180],
                         [220, 20, 60], [255, 0, 0], [0, 0, 142], [0, 0, 70], [0, 60, 100], [0, 80, 100], [0, 0, 230],[119, 11, 32]]
 
-        self.pcd_main = o3d.geometry.PointCloud()
+        self.points = o3d.geometry.PointCloud()
         self.label_main = np.array([])
 
     
@@ -214,25 +214,25 @@ class Semantic_KITTI_Utils():
         # pcd_main = o3d.geometry.PointCloud()
         
         if self.index is not 0:
-            self.pcd_main.transform(self.global_poses[self.index-1])
+            self.points.transform(self.global_poses[self.index-1])
             # remove pc at ind-1 
             pcd2 = self.load_pc_and_label(self.index -1)
             pt_to_remove_list = list(range(0,np.array(pcd2.points).shape[0]))
-            self.pcd_main = o3d.geometry.select_down_sample(self.pcd_main, pt_to_remove_list, invert=True)
+            self.points = o3d.geometry.select_down_sample(self.points, pt_to_remove_list, invert=True)
             
             if (self.index + self.n_scans_stitched) < self.max_index: 
                 # add pc at self.index + self.n_scans_stitched
                 pcd1 = self.load_pc_and_label(self.index - 1 + self.n_scans_stitched, do_global_tf=True)
                 # pcd1.transform(np.linalg.inv(self.global_poses[self.index]))
-                self.pcd_main = self.pcd_main + pcd1
+                self.points = self.points + pcd1
 
-            self.pcd_main.transform(np.linalg.inv(self.global_poses[self.index]))
+            self.points.transform(np.linalg.inv(self.global_poses[self.index]))
         else:
             for i in range(self.index, self.index + self.n_scans_stitched):
                 pcd1 = self.load_pc_and_label(i, do_global_tf=True)
-                self.pcd_main = self.pcd_main + pcd1
+                self.points = self.points + pcd1
                 
-            self.pcd_main.transform(np.linalg.inv(self.global_poses[self.index]))
+            self.points.transform(np.linalg.inv(self.global_poses[self.index]))
 
         # # fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
         # # fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))

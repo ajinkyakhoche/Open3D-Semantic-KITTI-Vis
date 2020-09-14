@@ -83,7 +83,7 @@ if __name__ == "__main__":
         # cv2.imshow('learn_mapping', img_learn_mapping)
         
         # Update the display
-        vis_handle.update(handle.pcd_main)
+        vis_handle.update(handle.points)
         cv2.imshow('img-depth-overlay', handle.overlay_frame)
 
         # Saving the frames
