@@ -17,7 +17,7 @@ def init_params():
     parser.add_argument('--index', default = 0, type=int, help='start index')
     parser.add_argument('--voxel', default = 0.1, type=float, help='voxel size for down sampleing')
     parser.add_argument('--modify', action = 'store_true', default = False, help='modify an existing view')
-    parser.add_argument('--n_scans_stitched', default=10, type=int, help='no. of pc scans to stitch')
+    parser.add_argument('--n_scans_stitched', default=30, type=int, help='no. of pc scans to stitch')
     parser.add_argument('--saved_poses_path', default='../KITTI_dense_registration/saved_global_poses/', type=str)
     args = parser.parse_args()
 
@@ -45,7 +45,8 @@ if __name__ == "__main__":
     # cv2.namedWindow('learn_mapping');cv2.moveWindow("learn_mapping", 400,200)
     # cv2.namedWindow('semantic');cv2.moveWindow("semantic", 200,400)
 
-    cv2.namedWindow('img-depth-overlay');cv2.moveWindow("img-depth-overlay", 600,000)
+    cv2.namedWindow('img-depth-overlay', cv2.WINDOW_NORMAL);cv2.moveWindow("img-depth-overlay", x=900,y=0); cv2.resizeWindow('img-depth-overlay', width=1100, height=400)
+
 
     for index in range(args.index, handle.get_max_index()):
         # Load image, velodyne points and semantic labels

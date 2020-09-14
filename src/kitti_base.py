@@ -72,7 +72,7 @@ def remove_ego_pts(pcd):
 class PointCloud_Vis():
     def __init__(self,cfg, new_config = False, width = 800, height = 800):
         self.vis = o3d.visualization.VisualizerWithKeyCallback()
-        self.vis.create_window(width=width, height=height, left=100, top=100)
+        self.vis.create_window(width=width, height=height, left=0, top=0)
         self.vis.get_render_option().load_from_json('config/render_option.json')
         self.cfg = cfg
 
@@ -151,7 +151,7 @@ class Semantic_KITTI_Utils():
         self.frame_root = os.path.join(self.root, 'data_odometry_color/dataset/sequences/', part)
         self.vel_root = os.path.join(self.root, 'data_odometry_velodyne/dataset/sequences/', part)
         self.label_root = os.path.join(self.root, 'data_odometry_labels/dataset/sequences/', part)
-        self.overlay_root = os.path.join(self.root, "SLAM_"+str(self.n_scans_stitched)+'/dataset/sequences/', part)
+        self.overlay_root = os.path.join(self.root, "SLAM_"+'10'+'/dataset/sequences/', part) #str(self.n_scans_stitched)
 
         self.index = 0
         self.max_index = length[part]
@@ -214,20 +214,25 @@ class Semantic_KITTI_Utils():
         # pcd_main = o3d.geometry.PointCloud()
         
         if self.index is not 0:
+            self.pcd_main.transform(self.global_poses[self.index-1])
             # remove pc at ind-1 
-            pcd2 = self.load_pc_and_label(self.index -1, do_global_tf=True)
+            pcd2 = self.load_pc_and_label(self.index -1)
             pt_to_remove_list = list(range(0,np.array(pcd2.points).shape[0]))
             self.pcd_main = o3d.geometry.select_down_sample(self.pcd_main, pt_to_remove_list, invert=True)
             
             if (self.index + self.n_scans_stitched) < self.max_index: 
                 # add pc at self.index + self.n_scans_stitched
                 pcd1 = self.load_pc_and_label(self.index - 1 + self.n_scans_stitched, do_global_tf=True)
+                # pcd1.transform(np.linalg.inv(self.global_poses[self.index]))
                 self.pcd_main = self.pcd_main + pcd1
+
+            self.pcd_main.transform(np.linalg.inv(self.global_poses[self.index]))
         else:
             for i in range(self.index, self.index + self.n_scans_stitched):
                 pcd1 = self.load_pc_and_label(i, do_global_tf=True)
                 self.pcd_main = self.pcd_main + pcd1
                 
+            self.pcd_main.transform(np.linalg.inv(self.global_poses[self.index]))
 
         # # fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
         # # fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))
