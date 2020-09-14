@@ -214,7 +214,8 @@ class Semantic_KITTI_Utils():
         # pcd_main = o3d.geometry.PointCloud()
         
         if self.index is not 0:
-            self.points.transform(self.global_poses[self.index-1])
+            # incorporate delta of transform bw index-1 and index
+            self.points.transform(np.dot(np.linalg.inv(self.global_poses[self.index]), self.global_poses[self.index-1]))
             # remove pc at ind-1 
             pcd2 = self.load_pc_and_label(self.index -1)
             pt_to_remove_list = list(range(0,np.array(pcd2.points).shape[0]))
@@ -222,18 +223,20 @@ class Semantic_KITTI_Utils():
             
             if (self.index + self.n_scans_stitched) < self.max_index: 
                 # add pc at self.index + self.n_scans_stitched
-                pcd1 = self.load_pc_and_label(self.index - 1 + self.n_scans_stitched, do_global_tf=True)
-                # pcd1.transform(np.linalg.inv(self.global_poses[self.index]))
+                pcd1 = self.load_pc_and_label(self.index - 1 + self.n_scans_stitched, do_global_tf=False)
+                # incorporate delta of transform bw index and index and index - 1 + n_scans_stitched
+                delta_tf = np.dot(np.linalg.inv(self.global_poses[self.index]), self.global_poses[self.index - 1 + self.n_scans_stitched])
+                pcd1.transform(delta_tf)
                 self.points = self.points + pcd1
-
-            self.points.transform(np.linalg.inv(self.global_poses[self.index]))
         else:
             for i in range(self.index, self.index + self.n_scans_stitched):
-                pcd1 = self.load_pc_and_label(i, do_global_tf=True)
+                pcd1 = self.load_pc_and_label(i, do_global_tf=False)
+                # incorporate delta of transform bw index and index and index - i
+                delta_tf = np.dot(np.linalg.inv(self.global_poses[self.index]), self.global_poses[i])
+                pcd1.transform(delta_tf)
                 self.points = self.points + pcd1
                 
-            self.points.transform(np.linalg.inv(self.global_poses[self.index]))
-
+            
         # # fn_frame = os.path.join(self.sequence_root, 'image_2/%06d.png' % (self.index))
         # # fn_velo = os.path.join(self.sequence_root, 'velodyne/%06d.bin' %(self.index))
         # # fn_label = os.path.join(self.sequence_root, 'labels/%06d.label' %(self.index))
