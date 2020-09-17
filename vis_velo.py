@@ -6,6 +6,7 @@ import glob
 import cv2
 import argparse
 import json
+import imageio
 
 from src.kitti_base import PointCloud_Vis, Semantic_KITTI_Utils
 
@@ -15,11 +16,14 @@ def init_params():
     parser.add_argument('--root', default = os.environ.get('KITTI_ROOT','~/dataset/KITTI/'), type=str)
     parser.add_argument('--part', default = '00', type=str , help='KITTI part number')
     parser.add_argument('--start_index', default = 0, type=int, help='start index')
+    parser.add_argument('--end_index', default = 150, type=int, help='end index')
     parser.add_argument('--voxel', default = 0.1, type=float, help='voxel size for down sampleing')
     parser.add_argument('--modify', action = 'store_true', default = False, help='modify an existing view')
     parser.add_argument('--n_scans_stitched', default=3, type=int, help='no. of pc scans to stitch')
     parser.add_argument('--saved_poses_path', default='../KITTI_dense_registration/saved_global_poses/', type=str)
     parser.add_argument('--operation', default='view_generated_maps', type=str)
+    parser.add_argument('--create_gif', action = 'store_true', default = False, help='create a gif out of the view')
+    
     args = parser.parse_args()
 
     assert os.path.exists(args.root),'Root directory does not exist '+ args.root
@@ -42,13 +46,14 @@ def init_params():
 
 if __name__ == "__main__":
     args, handle, vis_handle = init_params()
-    
+    gif_img_list = []
+
     if args.operation == 'view_generated_maps':
         cv2.namedWindow('depth');cv2.moveWindow("depth", 600,000)
         cv2.namedWindow('learn_mapping');cv2.moveWindow("learn_mapping", 400,200)
         cv2.namedWindow('semantic');cv2.moveWindow("semantic", 200,400)
 
-        for index in range(args.start_index, handle.get_max_index()):
+        for index in range(args.start_index, args.end_index): #handle.get_max_index()
             # Load image, velodyne points and semantic labels
             handle.load(index)
 
@@ -84,24 +89,43 @@ if __name__ == "__main__":
             cv2.imshow('semantic', img_semantic)
             cv2.imshow('learn_mapping', img_learn_mapping)
             
-            # Saving the frames
-            vis_handle.capture_screen('/tmp/img_3d_%d.png'%(index))
-            cv2.imwrite('/tmp/img_depth_%d.jpg'%(index),img_depth)
-            cv2.imwrite('/tmp/img_semantic_%d.jpg'%(index),img_semantic)
-            cv2.imwrite('/tmp/img_learn_mapping%d.jpg'%(index),img_learn_mapping)
+            if args.create_gif:
+                # Saving the frames
+                vis_handle.capture_screen('/tmp/img_3d_%d.png'%(index))
+                cv2.imwrite('/tmp/img_depth_%d.jpg'%(index),img_depth)
+                cv2.imwrite('/tmp/img_semantic_%d.jpg'%(index),img_semantic)
+                cv2.imwrite('/tmp/img_learn_mapping%d.jpg'%(index),img_learn_mapping)
 
             if 32 == cv2.waitKey(1):
                 break
     elif args.operation == 'view_preloaded_maps':
         cv2.namedWindow('img-depth-overlay', cv2.WINDOW_NORMAL);cv2.moveWindow("img-depth-overlay", x=900,y=0); cv2.resizeWindow('img-depth-overlay', width=1100, height=400)
-
-        for index in range(args.start_index, handle.get_max_index()):
+        cv2.namedWindow('slam', cv2.WINDOW_NORMAL);cv2.moveWindow("slam", x=900,y=400); cv2.resizeWindow('slam', width=1100, height=400)
+        for index in range(args.start_index, args.end_index): #handle.get_max_index()
             # Load image, velodyne points and semantic labels
             handle.load(index)
 
             # Update the display
             vis_handle.update(handle.points)
             cv2.imshow('img-depth-overlay', handle.overlay_frame)
+            cv2.imshow('slam', handle.slam_frame)
 
+            if args.create_gif:
+                gif_img = np.zeros((800,2100,3), dtype=np.uint8)
+                # gif_img[:400, :400,:] = cv2.resize(np.array(vis_handle.vis.capture_screen_float_buffer(False)),(0,0), fx=0.5, fy=0.5) 
+                # gif_img[:200, 400:,:] = cv2.resize(handle.overlay_frame, (660, 200))/256.0
+                # gif_img[200:, 400:,:] = cv2.resize(handle.slam_frame, (660, 200))/256.0
+                
+                vel_capture = np.array(vis_handle.vis.capture_screen_float_buffer(False)) * 256.0
+                # vel_capture = cv2.resize(vel_capture, (0,0), fx=0.5, fy=0.5)
+                # vel_capture = cv2.cvtColor(vel_capture, cv2.COLOR_BGR2RGB)
+                gif_img[:800, :800,:] = vel_capture.astype(np.uint8)
+                gif_img[:400, 800:,:] = cv2.resize(cv2.cvtColor(handle.overlay_frame, cv2.COLOR_BGR2RGB), (1300, 400))
+                gif_img[400:, 800:,:] = cv2.resize(cv2.cvtColor(handle.slam_frame, cv2.COLOR_BGR2RGB), (1300, 400))
+                
+                pil_img = Image.fromarray(gif_img)
+                gif_img_list.append(gif_img)
+                
             if 32 == cv2.waitKey(1):
                 break
+        imageio.mimsave('./view_preloaded_maps.gif', gif_img_list, fps=5)

@@ -250,7 +250,7 @@ class Semantic_KITTI_Utils():
         assert self.frame is not None, 'Broken dataset %s' % (self.frame_root)
         
         self.overlay_frame = cv2.imread(os.path.join(self.overlay_root, 'slam_depth_overlay_%06d.png' %(self.index)))
-
+        self.slam_frame = cv2.imread(os.path.join(self.overlay_root, 'slam_%06d.png' %(self.index))) 
         return True
     
     def set_filter(self, h_fov, v_fov, x_range = None, y_range = None, z_range = None, d_range = None):
