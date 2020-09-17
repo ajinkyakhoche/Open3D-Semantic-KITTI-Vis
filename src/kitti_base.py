@@ -176,6 +176,7 @@ class Semantic_KITTI_Utils():
                         [220, 20, 60], [255, 0, 0], [0, 0, 142], [0, 0, 70], [0, 60, 100], [0, 80, 100], [0, 0, 230],[119, 11, 32]]
 
         self.points = o3d.geometry.PointCloud()
+        self.sem_label = np.array([])
         self.mask_pts_to_remove = np.array([])
 
     def load_points(self, ind):
@@ -196,9 +197,10 @@ class Semantic_KITTI_Utils():
         label  = np.delete(label, self.ind_pts_to_remove)
 
         if label.shape[0] == pc.shape[0]:
-            self.sem_label = label & 0xFFFF  # semantic label in lower half
+            l1 = label & 0xFFFF  # semantic label in lower half
             self.inst_label = label >> 16  # instance id in upper half
-            assert((self.sem_label + (self.inst_label << 16) == label).all()) # sanity check
+            assert((l1 + (self.inst_label << 16) == label).all()) # sanity check
+            self.sem_label = np.append(self.sem_label, l1)
         else:
             print("Points shape: ", pc.shape)
             print("Label shape: ", label.shape)
