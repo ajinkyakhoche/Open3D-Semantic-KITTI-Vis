@@ -139,7 +139,7 @@ class Semantic_KITTI_Utils():
         self.frame_root = os.path.join(self.root, 'data_odometry_color/dataset/sequences/', part)
         self.vel_root = os.path.join(self.root, 'data_odometry_velodyne/dataset/sequences/', part)
         self.label_root = os.path.join(self.root, 'data_odometry_labels/dataset/sequences/', part)
-        # self.overlay_root = os.path.join(self.root, "SLAM_"+'10'+'/dataset/sequences/', part) #str(self.n_scans_stitched)
+        self.overlay_root = os.path.join(self.root, "SLAM_"+'10'+'/dataset/sequences/', part) #str(self.n_scans_stitched)
 
         assert os.path.exists(self.frame_root), 'Broken dataset %s' % (self.frame_root)
         assert os.path.exists(self.vel_root), 'Broken dataset %s' % (self.vel_root)
@@ -249,7 +249,7 @@ class Semantic_KITTI_Utils():
         self.frame = cv2.imread(os.path.join(self.frame_root, 'image_2/%06d.png' % (self.index)))
         assert self.frame is not None, 'Broken dataset %s' % (self.frame_root)
         
-        # self.overlay_frame = cv2.imread(os.path.join(self.overlay_root, 'slam_depth_overlay_%06d.png' %(self.index)))
+        self.overlay_frame = cv2.imread(os.path.join(self.overlay_root, 'slam_depth_overlay_%06d.png' %(self.index)))
 
         return True
     
@@ -391,7 +391,7 @@ class Semantic_KITTI_Utils():
         pts_2d = pts_2d.astype(np.int32).tolist()
 
         for (x,y),c in zip(pts_2d,color):
-            cv2.circle(image, (x, y), 2, [c[2],c[1],c[0]], -1)
+            cv2.circle(image, (x, y), 1, [c[2],c[1],c[0]], -1)
             
         return image
 
