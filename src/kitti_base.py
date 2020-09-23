@@ -206,7 +206,7 @@ class Semantic_KITTI_Utils():
             print("Label shape: ", label.shape)
             raise ValueError("Scan and Label don't contain same number of points")
 
-    def load(self,index = None):
+    def load(self,index = None, start_index=0):
         """  Load the frame, point cloud and semantic labels from file """
         label = np.array([], dtype=np.uint32)
         self.index = index
@@ -214,7 +214,7 @@ class Semantic_KITTI_Utils():
             print('End of sequence')
             return False
  
-        if self.index is not 0:
+        if self.index is not start_index:
             # incorporate delta of transform bw index-1 and index
             self.points.transform(np.dot(np.linalg.inv(self.global_poses[self.index]), self.global_poses[self.index-1]))
             # remove pc at ind-1 

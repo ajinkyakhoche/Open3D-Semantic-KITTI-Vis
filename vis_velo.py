@@ -15,7 +15,7 @@ def init_params():
     parser.add_argument('--cfg', default = 'config/ego_view.json', type=str)
     parser.add_argument('--root', default = os.environ.get('KITTI_ROOT','~/dataset/KITTI/'), type=str)
     parser.add_argument('--part', default = '00', type=str , help='KITTI part number')
-    parser.add_argument('--start_index', default = 0, type=int, help='start index')
+    parser.add_argument('--start_index', default = 100, type=int, help='start index')
     parser.add_argument('--end_index', default = 150, type=int, help='end index')
     parser.add_argument('--voxel', default = 0.1, type=float, help='voxel size for down sampleing')
     parser.add_argument('--modify', action = 'store_true', default = False, help='modify an existing view')
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
         for index in range(args.start_index, args.end_index): #handle.get_max_index()
             # Load image, velodyne points and semantic labels
-            handle.load(index)
+            handle.load(index, args.start_index)
 
             # Downsample the point cloud and semantic labels at the same time
             # pcd,sem_label = handle.extract_points(voxel_size = args.voxel)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         cv2.namedWindow('slam', cv2.WINDOW_NORMAL);cv2.moveWindow("slam", x=900,y=400); cv2.resizeWindow('slam', width=1100, height=400)
         for index in range(args.start_index, args.end_index): #handle.get_max_index()
             # Load image, velodyne points and semantic labels
-            handle.load(index)
+            handle.load(index, args.start_index)
 
             # Update the display
             vis_handle.update(handle.points)
@@ -112,18 +112,16 @@ if __name__ == "__main__":
 
             if args.create_gif:
                 gif_img = np.zeros((800,2100,3), dtype=np.uint8)
-                # gif_img[:400, :400,:] = cv2.resize(np.array(vis_handle.vis.capture_screen_float_buffer(False)),(0,0), fx=0.5, fy=0.5) 
-                # gif_img[:200, 400:,:] = cv2.resize(handle.overlay_frame, (660, 200))/256.0
-                # gif_img[200:, 400:,:] = cv2.resize(handle.slam_frame, (660, 200))/256.0
+                # gif_img[:800, :800,:] = np.array(vis_handle.vis.capture_screen_float_buffer(False))*256 
+                # gif_img[:400, 800:,:] = cv2.resize(handle.overlay_frame, (1300, 400))
+                # gif_img[400:, 800:,:] = cv2.resize(handle.slam_frame, (1300, 400))
                 
                 vel_capture = np.array(vis_handle.vis.capture_screen_float_buffer(False)) * 256.0
-                # vel_capture = cv2.resize(vel_capture, (0,0), fx=0.5, fy=0.5)
-                # vel_capture = cv2.cvtColor(vel_capture, cv2.COLOR_BGR2RGB)
                 gif_img[:800, :800,:] = vel_capture.astype(np.uint8)
                 gif_img[:400, 800:,:] = cv2.resize(cv2.cvtColor(handle.overlay_frame, cv2.COLOR_BGR2RGB), (1300, 400))
                 gif_img[400:, 800:,:] = cv2.resize(cv2.cvtColor(handle.slam_frame, cv2.COLOR_BGR2RGB), (1300, 400))
-                
                 pil_img = Image.fromarray(gif_img)
+
                 gif_img_list.append(gif_img)
                 
             if 32 == cv2.waitKey(1):
